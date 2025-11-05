@@ -33,6 +33,7 @@ import com.example.archnote.data.Note
 import com.example.archnote.ui.theme.ArchnoteTheme
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 @Composable
 fun NoteEditScreen(
     noteId: Int?,
@@ -40,7 +41,7 @@ fun NoteEditScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: NoteViewModel = viewModel(
-        factory = NoteViewModelFactory((androidx.activity.ComponentActivity().application as ArchnoteApplication).repository)
+        factory = NoteViewModelFactory((LocalContext.current.applicationContext as ArchnoteApplication).repository)
     )
 ) {
     var title by remember { mutableStateOf("") }

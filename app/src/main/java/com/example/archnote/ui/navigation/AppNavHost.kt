@@ -5,16 +5,15 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.compose.ui.Modifier
 import com.example.archnote.ui.NoteDetailScreen
 import com.example.archnote.ui.NoteEditScreen
 import com.example.archnote.ui.NoteListScreen
-import androidx.compose.ui.Modifier
 
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    modifier:
-    Modifier = Modifier
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,

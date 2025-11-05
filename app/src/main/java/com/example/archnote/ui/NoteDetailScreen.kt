@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.archnote.ArchnoteApplication
 import com.example.archnote.ui.theme.ArchnoteTheme
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun NoteDetailScreen(
@@ -38,7 +39,7 @@ fun NoteDetailScreen(
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: NoteViewModel = viewModel(
-        factory = NoteViewModelFactory((androidx.activity.ComponentActivity().application as ArchnoteApplication).repository)
+        factory = NoteViewModelFactory((LocalContext.current.applicationContext as ArchnoteApplication).repository)
     )
 ) {
     LaunchedEffect(noteId) {
