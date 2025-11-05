@@ -16,11 +16,7 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _currentNote = MutableStateFlow<Note?>(null)
     val currentNote: StateFlow<Note?> = _currentNote.asStateFlow()
 
-    fun getNoteById(id: Int) {
-        viewModelScope.launch {
-            _currentNote.value = repository.getNoteById(id)
-        }
-    }
+
 
     fun insertNote(note: Note) {
         viewModelScope.launch {
@@ -42,5 +38,8 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
 
     fun clearCurrentNote() {
         _currentNote.value = null
+    }
+    suspend fun getNoteById(id: Int): Note? {
+        return repository.getNoteById(id)
     }
 }

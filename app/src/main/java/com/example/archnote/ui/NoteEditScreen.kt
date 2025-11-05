@@ -50,15 +50,16 @@ fun NoteEditScreen(
     // 如果是编辑现有笔记，加载笔记内容
     LaunchedEffect(noteId) {
         if (noteId != null && noteId != 0) {
+            // 直接调用挂起函数并获取返回值（关键修改）
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
             content = note?.content ?: ""
         } else {
-            // 新建笔记，请求焦点
             awaitFrame()
             titleFocusRequester.requestFocus()
         }
     }
+
 
     // 保存笔记
     fun saveNote() {
