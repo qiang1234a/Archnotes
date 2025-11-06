@@ -2,6 +2,7 @@
 package com.example.archnote.ui
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,8 +31,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.archnote.ArchnoteApplication
 import com.example.archnote.ui.theme.ArchnoteTheme
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.text.HtmlCompat
 
 @Composable
 fun NoteDetailScreen(
@@ -56,6 +55,7 @@ fun NoteDetailScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -90,16 +90,10 @@ fun NoteDetailScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    AndroidView(
-                        modifier = Modifier.weight(1f),
-                        factory = { ctx ->
-                            android.widget.TextView(ctx).apply {
-                                setText(HtmlCompat.fromHtml(it.content, HtmlCompat.FROM_HTML_MODE_LEGACY))
-                            }
-                        },
-                        update = { tv ->
-                            tv.text = HtmlCompat.fromHtml(it.content, HtmlCompat.FROM_HTML_MODE_LEGACY)
-                        }
+                    Text(
+                        text = it.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f)
                     )
 
                     Text(

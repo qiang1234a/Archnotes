@@ -73,5 +73,4 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("io.coil-kt:coil-compose:2.6.0")
-        // 已改为使用 Android EditText + Spannable，无需第三方富文本库
 }
