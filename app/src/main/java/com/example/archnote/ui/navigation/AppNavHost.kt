@@ -35,12 +35,24 @@ fun AppNavHost(
             NoteDetailScreen(
                 noteId = noteId,
                 onEditClick = {
-                    navController.navigate(NavRoutes.noteDetailRoute(noteId))
+                    navController.navigate(NavRoutes.noteEditRoute(noteId))
                 },
                 onBackClick = {
                     navController.popBackStack()
                 },
                 onDeleteClick = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable(NavRoutes.NOTE_EDIT) { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: 0
+            NoteEditScreen(
+                noteId = noteId,
+                onSaveClick = {
+                    navController.popBackStack()
+                },
+                onBackClick = {
                     navController.popBackStack()
                 }
             )
