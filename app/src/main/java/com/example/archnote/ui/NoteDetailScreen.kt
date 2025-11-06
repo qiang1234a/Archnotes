@@ -31,6 +31,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.archnote.ArchnoteApplication
 import com.example.archnote.ui.theme.ArchnoteTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 
 @Composable
 fun NoteDetailScreen(
@@ -91,7 +95,7 @@ fun NoteDetailScreen(
                     )
 
                     Text(
-                        text = it.content,
+                        text = parseSimpleStyles(it.content),
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f)
                     )
@@ -119,4 +123,39 @@ fun NoteDetailScreen(
             }
         }
     }
+}
+
+private fun parseSimpleStyles(input: String): AnnotatedString {
+    // 支持 **bold** 与 <u>underline</u>
+    val builder = AnnotatedString.Builder()
+    var i = 0
+    while (i < input.length) {
+        if (i + 1 < input.length && input[i] == '*' && input[i + 1] == '*') {
+            val start = i + 2
+            val end = input.indexOf("**", start)
+            if (end != -1) {
+                val segment = input.substring(start, end)
+                val startIndex = builder.length
+                builder.append(segment)
+                builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold), startIndex, startIndex + segment.length)
+                i = end + 2
+                continue
+            }
+        }
+        if (i + 2 < input.length && input.startsWith("<u>", i)) {
+            val start = i + 3
+            val end = input.indexOf("</u>", start)
+            if (end != -1) {
+                val segment = input.substring(start, end)
+                val startIndex = builder.length
+                builder.append(segment)
+                builder.addStyle(SpanStyle(textDecoration = TextDecoration.Underline), startIndex, startIndex + segment.length)
+                i = end + 4
+                continue
+            }
+        }
+        builder.append(input[i])
+        i += 1
+    }
+    return builder.toAnnotatedString()
 }
