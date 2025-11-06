@@ -69,4 +69,8 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
             onDone()
         }
     }
+
+    suspend fun getImagesForNote(noteId: Int): List<NoteImage> {
+        return repository.getImagesForNote(noteId)
+    }
 }

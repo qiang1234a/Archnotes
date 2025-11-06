@@ -67,6 +67,7 @@ fun NoteEditScreen(
     val titleFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
     val selectedImageUris = remember { mutableStateListOf<android.net.Uri>() }
+    val existingImageUris = remember { mutableStateListOf<android.net.Uri>() }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -76,13 +77,16 @@ fun NoteEditScreen(
         }
     }
 
-    // 如果是编辑现有笔记，加载笔记内容
+    // 如果是编辑现有笔记，加载笔记内容和已有图片
     LaunchedEffect(noteId) {
         if (noteId != null && noteId != 0) {
             // 直接调用挂起函数并获取返回值（关键修改）
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
             content = TextFieldValue(note?.content ?: "")
+            val images = viewModel.getImagesForNote(noteId)
+            existingImageUris.clear()
+            existingImageUris.addAll(images.mapNotNull { android.net.Uri.parse(it.uri) })
         } else {
             awaitFrame()
             titleFocusRequester.requestFocus()
@@ -248,10 +252,11 @@ fun NoteEditScreen(
                         }
                     )
 
-                    if (selectedImageUris.isNotEmpty()) {
+                    val allPreviewUris = (existingImageUris + selectedImageUris)
+                    if (allPreviewUris.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         LazyRow {
-                            items(selectedImageUris) { uri ->
+                            items(allPreviewUris) { uri ->
                                 AsyncImage(
                                     model = uri,
                                     contentDescription = "已选择图片",
