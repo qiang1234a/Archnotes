@@ -10,8 +10,8 @@ class NoteRepository(private val noteDao: NoteDao) {
         return noteDao.getNoteById(id)
     }
 
-    suspend fun insertNote(note: Note) {
-        noteDao.insertNote(note)
+    suspend fun insertNote(note: Note): Int {
+        return noteDao.insertNote(note).toInt()
     }
 
     suspend fun updateNote(note: Note) {
@@ -20,5 +20,24 @@ class NoteRepository(private val noteDao: NoteDao) {
 
     suspend fun deleteNote(note: Note) {
         noteDao.deleteNote(note)
+    }
+
+    // Images
+    suspend fun insertNoteImage(image: NoteImage): Int {
+        return noteDao.insertNoteImage(image).toInt()
+    }
+
+    suspend fun insertImagesForNote(noteId: Int, uris: List<String>) {
+        for (uri in uris) {
+            noteDao.insertNoteImage(NoteImage(noteId = noteId, uri = uri))
+        }
+    }
+
+    suspend fun getImagesForNote(noteId: Int): List<NoteImage> {
+        return noteDao.getImagesForNote(noteId)
+    }
+
+    suspend fun deleteImagesForNote(noteId: Int) {
+        noteDao.deleteImagesForNote(noteId)
     }
 }

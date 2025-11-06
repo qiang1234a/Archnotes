@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import java.time.LocalDateTime
 
-@Database(entities = [Note::class, NoteImage::class], version = 2, exportSchema = false)
+@Database(entities = [Note::class], version = 1, exportSchema = false)
 @TypeConverters(LocalDateTimeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
@@ -23,7 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "note_database"
-                ).fallbackToDestructiveMigration().build()
+                ).build()
                 INSTANCE = instance
                 instance
             }

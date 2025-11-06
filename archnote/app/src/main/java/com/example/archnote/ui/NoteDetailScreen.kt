@@ -43,7 +43,7 @@ fun NoteDetailScreen(
     )
 ) {
     LaunchedEffect(noteId) {
-        viewModel.loadNoteById(noteId)
+        viewModel.getNoteById(noteId)
     }
 
     val note by viewModel.currentNote.collectAsStateWithLifecycle()

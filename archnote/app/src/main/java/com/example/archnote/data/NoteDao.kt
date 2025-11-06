@@ -17,21 +17,11 @@ interface NoteDao {
     suspend fun getNoteById(id: Int): Note?
 
     @Insert
-    suspend fun insertNote(note: Note): Long
+    suspend fun insertNote(note: Note)
 
     @Update
     suspend fun updateNote(note: Note)
 
     @Delete
     suspend fun deleteNote(note: Note)
-
-    // Images
-    @Insert
-    suspend fun insertNoteImage(image: NoteImage): Long
-
-    @Query("SELECT * FROM note_images WHERE noteId = :noteId")
-    suspend fun getImagesForNote(noteId: Int): List<NoteImage>
-
-    @Query("DELETE FROM note_images WHERE noteId = :noteId")
-    suspend fun deleteImagesForNote(noteId: Int)
 }
