@@ -2,6 +2,7 @@
 package com.example.archnote.ui
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +55,7 @@ fun NoteDetailScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
