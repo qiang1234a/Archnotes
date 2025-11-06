@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
@@ -29,6 +30,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.archnote.ArchnoteApplication
@@ -48,7 +51,7 @@ fun NoteEditScreen(
     )
 ) {
     var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf(TextFieldValue("")) }
     val titleFocusRequester = remember { FocusRequester() }
 
     // 如果是编辑现有笔记，加载笔记内容
@@ -57,7 +60,7 @@ fun NoteEditScreen(
             // 直接调用挂起函数并获取返回值（关键修改）
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
-            content = note?.content ?: ""
+            content = TextFieldValue(note?.content ?: "")
         } else {
             awaitFrame()
             titleFocusRequester.requestFocus()
@@ -67,11 +70,11 @@ fun NoteEditScreen(
 
     // 保存笔记
     fun saveNote() {
-        if (title.isNotBlank() || content.isNotBlank()) {
+        if (title.isNotBlank() || content.text.isNotBlank()) {
             val note = if (noteId != null && noteId != 0) {
-                Note(id = noteId, title = title, content = content)
+                Note(id = noteId, title = title, content = content.text)
             } else {
-                Note(title = title, content = content)
+                Note(title = title, content = content.text)
             }
 
             if (noteId != null && noteId != 0) {
@@ -108,6 +111,61 @@ fun NoteEditScreen(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
+                // 简易格式工具栏
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = {
+                        val sel = content.selection
+                        val text = content.text
+                        val start = sel.start.coerceAtLeast(0).coerceAtMost(text.length)
+                        val end = sel.end.coerceAtLeast(0).coerceAtMost(text.length)
+                        if (start == end) {
+                            val inserted = text.substring(0, start) + "****" + text.substring(start)
+                            val cursor = start + 2
+                            content = TextFieldValue(
+                                inserted,
+                                selection = TextRange(cursor, cursor)
+                            )
+                        } else {
+                            val selected = text.substring(start, end)
+                            val replaced = text.substring(0, start) + "**" + selected + "**" + text.substring(end)
+                            content = TextFieldValue(
+                                replaced,
+                                selection = TextRange(start, start + 2 + selected.length + 2)
+                            )
+                        }
+                    }) {
+                        Text("B")
+                    }
+
+                    TextButton(onClick = {
+                        val sel = content.selection
+                        val text = content.text
+                        val start = sel.start.coerceAtLeast(0).coerceAtMost(text.length)
+                        val end = sel.end.coerceAtLeast(0).coerceAtMost(text.length)
+                        if (start == end) {
+                            val inserted = text.substring(0, start) + "<u></u>" + text.substring(start)
+                            val cursor = start + 3
+                            content = TextFieldValue(
+                                inserted,
+                                selection = TextRange(cursor, cursor)
+                            )
+                        } else {
+                            val selected = text.substring(start, end)
+                            val replaced = text.substring(0, start) + "<u>" + selected + "</u>" + text.substring(end)
+                            content = TextFieldValue(
+                                replaced,
+                                selection = TextRange(start, start + 3 + selected.length + 4)
+                            )
+                        }
+                    }) {
+                        Text("U")
+                    }
+                }
                 // 标题输入
                 BasicTextField(
                     value = title,
@@ -136,7 +194,7 @@ fun NoteEditScreen(
                     textStyle = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxSize(),
                     decorationBox = { innerTextField ->
-                        if (content.isEmpty()) {
+                        if (content.text.isEmpty()) {
                             Text(
                                 text = "输入内容...",
                                 style = MaterialTheme.typography.bodyLarge,
