@@ -30,6 +30,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.RadioButtonChecked
 import com.example.archnote.data.NoteAudio
 import com.example.archnote.data.NoteFile
 import androidx.compose.foundation.border
@@ -41,6 +43,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +57,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.runtime.mutableStateOf
 
 @Composable
 fun NoteDetailScreen(
@@ -69,6 +74,8 @@ fun NoteDetailScreen(
     val audios = remember { mutableStateListOf<NoteAudio>() }
     val files = remember { mutableStateListOf<NoteFile>() }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var displayedContent by remember { mutableStateOf("") }
 
     // 加载笔记和录音列表
     LaunchedEffect(noteId) {
@@ -81,6 +88,10 @@ fun NoteDetailScreen(
         files.addAll(fileList)
     }
 
+    LaunchedEffect(note) {
+        displayedContent = note?.content ?: ""
+    }
+
     // 格式化录音时长
     fun formatDuration(millis: Long): String {
         val seconds = millis / 1000
@@ -88,7 +99,7 @@ fun NoteDetailScreen(
         val remainingSeconds = seconds % 60
         return String.format("%02d:%02d", minutes, remainingSeconds)
     }
-    
+
     // 格式化文件大小
     fun formatFileSize(bytes: Long): String {
         return when {
@@ -98,7 +109,7 @@ fun NoteDetailScreen(
             else -> "${bytes / (1024 * 1024 * 1024)} GB"
         }
     }
-    
+
     // 打开文件
     fun openFile(context: android.content.Context, uriString: String) {
         try {
@@ -160,7 +171,28 @@ fun NoteDetailScreen(
                             .weight(1f)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        parseContentWithTables(it.content)
+                        parseContentWithTables(displayedContent) { lineIndex ->
+                            val lines = displayedContent.split("\n").toMutableList()
+                            if (lineIndex in lines.indices) {
+                                val originalLine = lines[lineIndex]
+                                val trimmed = originalLine.trimStart()
+                                val leadingSpaces = originalLine.substring(0, originalLine.length - trimmed.length)
+                                val newLine = when {
+                                    trimmed.startsWith("○ ") -> leadingSpaces + "● " + trimmed.drop(2)
+                                    trimmed.startsWith("● ") -> leadingSpaces + "○ " + trimmed.drop(2)
+                                    else -> return@parseContentWithTables
+                                }
+                                lines[lineIndex] = newLine
+                                val newContent = lines.joinToString("\n")
+                                displayedContent = newContent
+                                coroutineScope.launch {
+                                    note?.let {
+                                        viewModel.updateNote(it.copy(content = newContent))
+                                        viewModel.loadNoteById(noteId)
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // 显示录音列表
@@ -209,7 +241,7 @@ fun NoteDetailScreen(
                             }
                         }
                     }
-                    
+
                     // 显示文件列表
                     if (files.isNotEmpty()) {
                         Spacer(modifier = Modifier.padding(vertical = 12.dp))
@@ -287,25 +319,61 @@ fun NoteDetailScreen(
 }
 
 @Composable
-private fun parseContentWithTables(input: String) {
+private fun parseContentWithTables(input: String, onToggleTodo: (Int) -> Unit = {}) {
     if (input.isEmpty()) {
         return
     }
-    
+
     val lines = input.split("\n")
     var i = 0
     val textBuffer = StringBuilder()
-    
+
     while (i < lines.size) {
         val line = lines[i]
         val trimmedLine = line.trim()
-        
+
         // 检查是否是表格行（以|开头和结尾，且包含至少3个|，即至少有一列）
-        val isTableLine = trimmedLine.startsWith("|") && 
-                         trimmedLine.endsWith("|") && 
+        val isTableLine = trimmedLine.startsWith("|") &&
+                         trimmedLine.endsWith("|") &&
                          trimmedLine.length > 2 &&
                          trimmedLine.count { it == '|' } >= 3
-        
+
+        // 检查是否是待办事项
+        val isTodoLine = trimmedLine.startsWith("○ ") || trimmedLine.startsWith("● ")
+        if (isTodoLine) {
+            if (textBuffer.isNotEmpty()) {
+                Text(
+                    text = parseSimpleStyles(textBuffer.toString()),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                textBuffer.clear()
+            }
+
+            val isCompleted = trimmedLine.startsWith("● ")
+            val taskText = trimmedLine.drop(2)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable { onToggleTodo(i) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    if (isCompleted) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (isCompleted) "待办已完成" else "待办未完成",
+                    tint = if (isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = parseSimpleStyles(taskText),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            i += 1
+            continue
+        }
+
         if (isTableLine) {
             // 先输出之前的文本
             if (textBuffer.isNotEmpty()) {
@@ -316,20 +384,20 @@ private fun parseContentWithTables(input: String) {
                 )
                 textBuffer.clear()
             }
-            
+
             // 解析表格 - 收集连续的表格行（允许中间有一个空行）
             val tableLines = mutableListOf<String>()
             var consecutiveEmptyLines = 0
-            
+
             while (i < lines.size) {
                 val currentLine = lines[i]
                 val currentTrimmed = currentLine.trim()
-                
-                val isCurrentTableLine = currentTrimmed.startsWith("|") && 
-                                         currentTrimmed.endsWith("|") && 
+
+                val isCurrentTableLine = currentTrimmed.startsWith("|") &&
+                                         currentTrimmed.endsWith("|") &&
                                          currentTrimmed.length > 2 &&
                                          currentTrimmed.count { it == '|' } >= 3
-                
+
                 if (isCurrentTableLine) {
                     // 表格行
                     tableLines.add(currentLine)
@@ -344,25 +412,25 @@ private fun parseContentWithTables(input: String) {
                     break
                 }
             }
-            
+
             // 至少需要表头行和分隔行，或者至少两行数据
             if (tableLines.size >= 2) {
                 // 解析表格数据
                 val tableData = tableLines.map { line ->
                     line.split("|").map { it.trim() }.filter { it.isNotEmpty() }
                 }
-                
+
                 // 检查第二行是否是分隔行（只包含-、:和|）
                 val isSeparatorLine = tableLines.size > 1 && {
                     val separatorLine = tableLines[1].trim()
                     separatorLine.replace("|", "").replace("-", "").replace(":", "").trim().isEmpty()
                 }()
-                
+
                 // 验证所有行的列数一致
                 if (tableData.isNotEmpty() && tableData[0].isNotEmpty()) {
                     val expectedCols = tableData[0].size
                     val allSameSize = tableData.all { it.size == expectedCols }
-                    
+
                     if (allSameSize && expectedCols > 0) {
                         // 显示表格
                         Spacer(modifier = Modifier.height(8.dp))
@@ -376,7 +444,7 @@ private fun parseContentWithTables(input: String) {
                         } else {
                             emptyList()
                         }
-                        
+
                         // 即使没有数据行，也显示表头
                         TableView(
                             headers = headerRow,
@@ -388,7 +456,7 @@ private fun parseContentWithTables(input: String) {
             }
             continue
         }
-        
+
         // 普通文本行
         if (textBuffer.isNotEmpty()) {
             textBuffer.append("\n")
@@ -396,7 +464,7 @@ private fun parseContentWithTables(input: String) {
         textBuffer.append(line)
         i++
     }
-    
+
     // 输出剩余的文本
     if (textBuffer.isNotEmpty()) {
         Text(
@@ -446,7 +514,7 @@ private fun TableView(headers: List<String>, rows: List<List<String>>) {
                     }
                 }
             }
-            
+
             // 数据行
             rows.forEachIndexed { rowIndex, row ->
                 Row(

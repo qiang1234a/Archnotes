@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.rememberCoroutineScope
@@ -514,6 +515,28 @@ fun NoteEditScreen(
         return String.format("%02d:%02d", minutes, remainingSeconds)
     }
     
+    fun insertTodoItem() {
+        val text = content.text
+        val selectionStart = content.selection.start.coerceIn(0, text.length)
+        val lineStart = if (selectionStart > 0) {
+            val idx = text.lastIndexOf('\n', selectionStart - 1)
+            if (idx == -1) 0 else idx + 1
+        } else {
+            0
+        }
+        val prefix = "○ "
+        if (text.startsWith(prefix, lineStart)) {
+            return
+        }
+        val newText = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+        val newCursor = selectionStart + prefix.length
+        content = TextFieldValue(
+            newText,
+            selection = TextRange(newCursor, newCursor)
+        )
+        saveToHistory()
+    }
+
     // 插入表格
     fun insertTable(rows: Int, cols: Int) {
         val sel = content.selection
@@ -696,7 +719,17 @@ fun NoteEditScreen(
                         }) {
                             Text("U")
                         }
-                        
+
+                        TextButton(onClick = {
+                            insertTodoItem()
+                        }) {
+                            Icon(
+                                Icons.Filled.RadioButtonUnchecked,
+                                contentDescription = "插入待办",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
                         TextButton(onClick = {
                             showTableDialog = true
                         }) {
