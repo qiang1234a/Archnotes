@@ -1,6 +1,8 @@
 // app/src/main/java/com/example/archnote/ui/NoteEditScreen.kt
 package com.example.archnote.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,6 +68,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import java.io.File
@@ -78,6 +82,7 @@ import com.example.archnote.data.NoteAudio
 import com.example.archnote.data.NoteFile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
+import androidx.compose.ui.draw.clip
 @Composable
 fun NoteEditScreen(
     noteId: Int?,
@@ -111,6 +116,7 @@ fun NoteEditScreen(
     var saveJob by remember { mutableStateOf<Job?>(null) }
     var isSaving by remember { mutableStateOf(false) }
     var lastSavedNoteId by remember { mutableStateOf<Int?>(null) }
+    var selectedColor by remember { mutableStateOf(Note.DEFAULT_COLOR) }
     
     // 表格对话框相关
     var showTableDialog by remember { mutableStateOf(false) }
@@ -186,6 +192,7 @@ fun NoteEditScreen(
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
             content = TextFieldValue(note?.content ?: "")
+            selectedColor = note?.color ?: Note.DEFAULT_COLOR
             // 初始化撤销/重做历史
             undoHistory.clear()
             redoHistory.clear()
@@ -277,9 +284,9 @@ fun NoteEditScreen(
             isSaving = true
             val currentNoteId = noteId ?: lastSavedNoteId
             val note = if (currentNoteId != null && currentNoteId != 0) {
-                Note(id = currentNoteId, title = title, content = content.text)
+                Note(id = currentNoteId, title = title, content = content.text, color = selectedColor)
             } else {
-                Note(title = title, content = content.text)
+                Note(title = title, content = content.text, color = selectedColor)
             }
 
             if (currentNoteId != null && currentNoteId != 0) {
@@ -738,6 +745,43 @@ fun NoteEditScreen(
                                 contentDescription = "插入表格",
                                 modifier = Modifier.size(20.dp)
                             )
+                        }
+                    }
+
+                    val colorOptions = listOf(
+                        0xFFFFFFFFL,
+                        0xFFFFF4E6L,
+                        0xFFFFE0B2L,
+                        0xFFE1F5FEL,
+                        0xFFE8F5E9L,
+                        0xFFF3E5F5L,
+                        0xFFFFEBEEL,
+                        0xFFE0F7FAL
+                    )
+
+                    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                        Text(
+                            text = "选择颜色",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            colorOptions.forEach { colorValue ->
+                                val isSelected = selectedColor == colorValue
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(colorValue))
+                                        .border(
+                                            width = if (isSelected) 3.dp else 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                            shape = CircleShape
+                                        )
+                                        .clickable { selectedColor = colorValue }
+                                )
+                            }
                         }
                     }
                     

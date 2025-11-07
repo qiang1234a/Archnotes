@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,12 +117,19 @@ private fun NoteItem(
     onNoteClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val backgroundColor = Color(note.color)
+    val contentColor = if (backgroundColor.luminance() < 0.5f) Color.White else Color.Black
+
     Card(
         modifier = modifier
             .padding(8.dp)
             .fillMaxWidth()
             .clickable { onNoteClick(note.id) },
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = backgroundColor,
+            contentColor = contentColor
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -130,19 +138,21 @@ private fun NoteItem(
                 text = note.title,
                 style = MaterialTheme.typography.headlineSmall,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = contentColor
             )
             Text(
                 text = note.content,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(top = 4.dp),
+                color = contentColor.copy(alpha = 0.9f)
             )
             Text(
                 text = note.formattedCreatedAt(),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = contentColor.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 8.dp)
             )
         }

@@ -11,6 +11,7 @@ data class Note(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
     val content: String,
+    val color: Long = DEFAULT_COLOR,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) {
@@ -18,5 +19,9 @@ data class Note(
     fun formattedCreatedAt(): String {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         return createdAt.format(formatter)
+    }
+
+    companion object {
+        const val DEFAULT_COLOR: Long = 0xFFFFFFFFL
     }
 }
