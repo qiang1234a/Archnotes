@@ -68,6 +68,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.archnote.data.NoteAudio
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 @Composable
 fun NoteEditScreen(
     noteId: Int?,
@@ -92,6 +93,11 @@ fun NoteEditScreen(
     var recordingDuration by remember { mutableStateOf(0L) }
     val newRecordings = remember { mutableStateListOf<Pair<String, Long>>() } // (filePath, duration)
     val existingAudios = remember { mutableStateListOf<NoteAudio>() }
+    
+    // 自动保存相关
+    var saveJob by remember { mutableStateOf<Job?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
+    var lastSavedNoteId by remember { mutableStateOf<Int?>(null) }
     
     // 权限请求
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -159,46 +165,102 @@ fun NoteEditScreen(
     }
 
 
-    // 保存笔记
-    fun saveNote() {
-        if (title.isNotBlank() || content.text.isNotBlank()) {
-            val note = if (noteId != null && noteId != 0) {
-                Note(id = noteId, title = title, content = content.text)
+    // 保存笔记（自动保存）
+    fun saveNote(auto: Boolean = false) {
+        if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty()) {
+            isSaving = true
+            val currentNoteId = noteId ?: lastSavedNoteId
+            val note = if (currentNoteId != null && currentNoteId != 0) {
+                Note(id = currentNoteId, title = title, content = content.text)
             } else {
                 Note(title = title, content = content.text)
             }
 
-            if (noteId != null && noteId != 0) {
+            if (currentNoteId != null && currentNoteId != 0) {
+                // 更新现有笔记
                 coroutineScope.launch {
                     viewModel.updateNote(note)
-                    if (selectedImageUris.isNotEmpty()) {
+                    val imagesToSave = selectedImageUris.toList()
+                    val recordingsToSave = newRecordings.toList()
+                    
+                    if (imagesToSave.isNotEmpty()) {
                         viewModel.addImagesToExistingNote(
-                            noteId,
-                            selectedImageUris.map { it.toString() }
+                            currentNoteId,
+                            imagesToSave.map { it.toString() }
                         )
+                        // 清除已保存的图片
+                        selectedImageUris.removeAll(imagesToSave)
                     }
-                    if (newRecordings.isNotEmpty()) {
+                    if (recordingsToSave.isNotEmpty()) {
                         viewModel.addAudiosToExistingNote(
-                            noteId,
-                            newRecordings.map { it.first },
-                            newRecordings.map { File(it.first).name },
-                            newRecordings.map { it.second }
+                            currentNoteId,
+                            recordingsToSave.map { it.first },
+                            recordingsToSave.map { File(it.first).name },
+                            recordingsToSave.map { it.second }
                         )
+                        // 清除已保存的录音
+                        newRecordings.removeAll(recordingsToSave)
                     }
-                    onSaveClick()
-                }
-            } else {
-                coroutineScope.launch {
-                    viewModel.insertNoteWithImagesAndAudios(
-                        note,
-                        selectedImageUris.map { it.toString() },
-                        newRecordings.map { it.first },
-                        newRecordings.map { File(it.first).name },
-                        newRecordings.map { it.second }
-                    ) {
+                    lastSavedNoteId = currentNoteId
+                    isSaving = false
+                    if (!auto) {
                         onSaveClick()
                     }
                 }
+            } else {
+                // 创建新笔记
+                coroutineScope.launch {
+                    val imagesToSave = selectedImageUris.toList()
+                    val recordingsToSave = newRecordings.toList()
+                    
+                    viewModel.insertNoteWithImagesAndAudios(
+                        note,
+                        imagesToSave.map { it.toString() },
+                        recordingsToSave.map { it.first },
+                        recordingsToSave.map { File(it.first).name },
+                        recordingsToSave.map { it.second }
+                    ) { savedNoteId ->
+                        lastSavedNoteId = savedNoteId
+                        isSaving = false
+                        // 清除已保存的图片和录音
+                        selectedImageUris.removeAll(imagesToSave)
+                        newRecordings.removeAll(recordingsToSave)
+                        if (!auto) {
+                            onSaveClick()
+                        }
+                    }
+                }
+            }
+        } else {
+            isSaving = false
+        }
+    }
+    
+    // 自动保存：监听标题、内容、图片和录音变化，使用防抖机制
+    LaunchedEffect(title, content.text, selectedImageUris.size, newRecordings.size) {
+        // 取消之前的保存任务
+        saveJob?.cancel()
+        
+        // 如果内容为空且没有图片和录音，不保存
+        if (title.isBlank() && content.text.isBlank() && selectedImageUris.isEmpty() && newRecordings.isEmpty()) {
+            return@LaunchedEffect
+        }
+        
+        // 延迟2秒后自动保存（防抖）
+        saveJob = coroutineScope.launch {
+            delay(2000) // 2秒防抖
+            saveNote(auto = true)
+        }
+    }
+    
+    // 页面离开时自动保存
+    DisposableEffect(Unit) {
+        onDispose {
+            // 取消待执行的保存任务
+            saveJob?.cancel()
+            // 立即保存
+            if (title.isNotBlank() || content.text.isNotBlank()) {
+                saveNote(auto = true)
             }
         }
     }
@@ -244,12 +306,34 @@ fun NoteEditScreen(
                     .padding(top = 12.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackClick) {
+                IconButton(onClick = {
+                    // 返回前自动保存
+                    saveJob?.cancel()
+                    if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty()) {
+                        saveNote(auto = true)
+                    }
+                    onBackClick()
+                }) {
                     Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                 }
 
-                IconButton(onClick = ::saveNote) {
-                    Icon(Icons.Filled.Save, contentDescription = "保存")
+                Spacer(modifier = Modifier.weight(1f))
+                
+                // 显示保存状态
+                if (isSaving) {
+                    Text(
+                        text = "保存中...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                } else if (lastSavedNoteId != null || (noteId != null && noteId != 0)) {
+                    Text(
+                        text = "已自动保存",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 }
             }
 
