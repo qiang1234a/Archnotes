@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -124,6 +126,19 @@ fun NoteDetailScreen(
         }
     }
 
+    fun shareNote(context: android.content.Context, title: String, content: String) {
+        try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, title)
+                putExtra(Intent.EXTRA_TEXT, "${title}\n\n$content")
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "分享笔记"))
+        } catch (e: Exception) {
+            // 处理错误
+        }
+    }
+
     ArchnoteTheme {
         Column(modifier = modifier.fillMaxSize()) {
             // 顶部导航栏
@@ -142,6 +157,14 @@ fun NoteDetailScreen(
 
                 IconButton(onClick = onEditClick) {
                     Icon(Icons.Filled.Edit, contentDescription = "编辑")
+                }
+
+                IconButton(onClick = {
+                    note?.let {
+                        shareNote(context, it.title, displayedContent)
+                    }
+                }) {
+                    Icon(Icons.Filled.Share, contentDescription = "分享")
                 }
 
                 IconButton(onClick = {
