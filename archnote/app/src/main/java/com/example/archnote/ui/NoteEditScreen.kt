@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,8 +24,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -53,6 +59,13 @@ fun NoteEditScreen(
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf(TextFieldValue("")) }
     val titleFocusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // 撤销功能相关
+    data class EditState(val title: String, val content: TextFieldValue)
+    val undoHistory = remember { mutableStateListOf<EditState>() }
+    var isUndoing by remember { mutableStateOf(false) }
+    var saveHistoryJob by remember { mutableStateOf<Job?>(null) }
 
     // 如果是编辑现有笔记，加载笔记内容
     LaunchedEffect(noteId) {
@@ -61,9 +74,49 @@ fun NoteEditScreen(
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
             content = TextFieldValue(note?.content ?: "")
+            // 初始化撤销历史
+            undoHistory.clear()
+            undoHistory.add(EditState(title, content))
         } else {
+            // 新笔记，初始化撤销历史
+            undoHistory.clear()
+            undoHistory.add(EditState("", TextFieldValue("")))
             awaitFrame()
             titleFocusRequester.requestFocus()
+        }
+    }
+    
+    // 保存状态到撤销历史（防抖）
+    fun saveToHistory() {
+        if (!isUndoing) {
+            saveHistoryJob?.cancel()
+            saveHistoryJob = coroutineScope.launch {
+                delay(300) // 300ms 防抖
+                val currentState = EditState(title, content)
+                // 如果与最后一个状态相同（只比较文本内容），不保存
+                val lastState = undoHistory.lastOrNull()
+                if (lastState == null || lastState.title != currentState.title || lastState.content.text != currentState.content.text) {
+                    undoHistory.add(currentState)
+                    // 限制历史记录数量，最多保留50个
+                    if (undoHistory.size > 50) {
+                        undoHistory.removeAt(0)
+                    }
+                }
+            }
+        }
+    }
+    
+    // 撤销操作
+    fun undo() {
+        if (undoHistory.size > 1) {
+            isUndoing = true
+            // 移除当前状态
+            undoHistory.removeLast()
+            // 恢复到上一个状态
+            val previousState = undoHistory.last()
+            title = previousState.title
+            content = previousState.content
+            isUndoing = false
         }
     }
 
@@ -118,6 +171,21 @@ fun NoteEditScreen(
                         .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // 撤销按钮
+                    IconButton(
+                        onClick = { undo() },
+                        enabled = undoHistory.size > 1
+                    ) {
+                        Icon(
+                            Icons.Filled.Undo,
+                            contentDescription = "撤销",
+                            tint = if (undoHistory.size > 1) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    }
+                    
                     TextButton(onClick = {
                         val sel = content.selection
                         val text = content.text
@@ -138,6 +206,7 @@ fun NoteEditScreen(
                                 selection = TextRange(start, start + 2 + selected.length + 2)
                             )
                         }
+                        saveToHistory()
                     }) {
                         Text("B")
                     }
@@ -162,6 +231,7 @@ fun NoteEditScreen(
                                 selection = TextRange(start, start + 3 + selected.length + 4)
                             )
                         }
+                        saveToHistory()
                     }) {
                         Text("U")
                     }
@@ -169,7 +239,10 @@ fun NoteEditScreen(
                 // 标题输入
                 BasicTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { 
+                        title = it
+                        saveToHistory()
+                    },
                     textStyle = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -190,7 +263,10 @@ fun NoteEditScreen(
                 // 内容输入
                 BasicTextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = { 
+                        content = it
+                        saveToHistory()
+                    },
                     textStyle = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxSize(),
                     decorationBox = { innerTextField ->
