@@ -29,13 +29,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.AttachFile
 import com.example.archnote.data.NoteAudio
+import com.example.archnote.data.NoteFile
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +67,8 @@ fun NoteDetailScreen(
 ) {
     val note by viewModel.currentNote.collectAsStateWithLifecycle()
     val audios = remember { mutableStateListOf<NoteAudio>() }
+    val files = remember { mutableStateListOf<NoteFile>() }
+    val context = LocalContext.current
 
     // 加载笔记和录音列表
     LaunchedEffect(noteId) {
@@ -69,6 +76,9 @@ fun NoteDetailScreen(
         val audioList = viewModel.getAudiosForNote(noteId)
         audios.clear()
         audios.addAll(audioList)
+        val fileList = viewModel.getFilesForNote(noteId)
+        files.clear()
+        files.addAll(fileList)
     }
 
     // 格式化录音时长
@@ -77,6 +87,30 @@ fun NoteDetailScreen(
         val minutes = seconds / 60
         val remainingSeconds = seconds % 60
         return String.format("%02d:%02d", minutes, remainingSeconds)
+    }
+    
+    // 格式化文件大小
+    fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+            else -> "${bytes / (1024 * 1024 * 1024)} GB"
+        }
+    }
+    
+    // 打开文件
+    fun openFile(context: android.content.Context, uriString: String) {
+        try {
+            val uri = Uri.parse(uriString)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "打开文件"))
+        } catch (e: Exception) {
+            // 处理错误
+        }
     }
 
     ArchnoteTheme {
@@ -169,6 +203,57 @@ fun NoteDetailScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 显示文件列表
+                    if (files.isNotEmpty()) {
+                        Spacer(modifier = Modifier.padding(vertical = 12.dp))
+                        Text(
+                            text = "附件文件",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(files) { file ->
+                                Card(
+                                    modifier = Modifier
+                                        .width(200.dp)
+                                        .clickable { openFile(context, file.uri) },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.AttachFile,
+                                            contentDescription = "文件",
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = file.fileName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                            if (file.fileSize > 0) {
+                                                Text(
+                                                    text = formatFileSize(file.fileSize),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                 }

@@ -44,4 +44,14 @@ interface NoteDao {
 
     @Query("DELETE FROM note_audios WHERE noteId = :noteId")
     suspend fun deleteAudiosForNote(noteId: Int)
+    
+    // Files
+    @Insert
+    suspend fun insertNoteFile(file: NoteFile): Long
+    
+    @Query("SELECT * FROM note_files WHERE noteId = :noteId")
+    suspend fun getFilesForNote(noteId: Int): List<NoteFile>
+    
+    @Query("DELETE FROM note_files WHERE noteId = :noteId")
+    suspend fun deleteFilesForNote(noteId: Int)
 }

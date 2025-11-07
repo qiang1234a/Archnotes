@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +66,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import java.io.File
 import android.Manifest
 import androidx.compose.runtime.DisposableEffect
@@ -72,6 +74,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.archnote.data.NoteAudio
+import com.example.archnote.data.NoteFile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 @Composable
@@ -98,6 +101,10 @@ fun NoteEditScreen(
     var recordingDuration by remember { mutableStateOf(0L) }
     val newRecordings = remember { mutableStateListOf<Pair<String, Long>>() } // (filePath, duration)
     val existingAudios = remember { mutableStateListOf<NoteAudio>() }
+    
+    // 文件相关状态
+    val selectedFileUris = remember { mutableStateListOf<android.net.Uri>() }
+    val existingFiles = remember { mutableStateListOf<NoteFile>() }
     
     // 自动保存相关
     var saveJob by remember { mutableStateOf<Job?>(null) }
@@ -161,6 +168,15 @@ fun NoteEditScreen(
             selectedImageUris.add(uri)
         }
     }
+    
+    // 文件选择器
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            selectedFileUris.add(uri)
+        }
+    }
 
     // 如果是编辑现有笔记，加载笔记内容和已有图片
     LaunchedEffect(noteId) {
@@ -179,6 +195,9 @@ fun NoteEditScreen(
             val audios = viewModel.getAudiosForNote(noteId)
             existingAudios.clear()
             existingAudios.addAll(audios)
+            val files = viewModel.getFilesForNote(noteId)
+            existingFiles.clear()
+            existingFiles.addAll(files)
         } else {
             // 新笔记，初始化撤销/重做历史
             undoHistory.clear()
@@ -253,7 +272,7 @@ fun NoteEditScreen(
 
     // 保存笔记（自动保存）
     fun saveNote(auto: Boolean = false) {
-        if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty()) {
+        if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty() || selectedFileUris.isNotEmpty()) {
             isSaving = true
             val currentNoteId = noteId ?: lastSavedNoteId
             val note = if (currentNoteId != null && currentNoteId != 0) {
@@ -268,6 +287,7 @@ fun NoteEditScreen(
                     viewModel.updateNote(note)
                     val imagesToSave = selectedImageUris.toList()
                     val recordingsToSave = newRecordings.toList()
+                    val filesToSave = selectedFileUris.toList()
                     
                     if (imagesToSave.isNotEmpty()) {
                         viewModel.addImagesToExistingNote(
@@ -287,6 +307,59 @@ fun NoteEditScreen(
                         // 清除已保存的录音
                         newRecordings.removeAll(recordingsToSave)
                     }
+                    if (filesToSave.isNotEmpty()) {
+                        // 获取文件信息
+                        val fileNames = filesToSave.map { uri ->
+                            try {
+                                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                                cursor?.use {
+                                    if (it.moveToFirst()) {
+                                        val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                        if (nameIndex >= 0) {
+                                            it.getString(nameIndex) ?: "文件_${System.currentTimeMillis()}"
+                                        } else {
+                                            "文件_${System.currentTimeMillis()}"
+                                        }
+                                    } else {
+                                        "文件_${System.currentTimeMillis()}"
+                                    }
+                                } ?: "文件_${System.currentTimeMillis()}"
+                            } catch (e: Exception) {
+                                "文件_${System.currentTimeMillis()}"
+                            }
+                        }
+                        val fileSizes = filesToSave.map { uri ->
+                            try {
+                                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                                cursor?.use {
+                                    if (it.moveToFirst()) {
+                                        val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                        if (sizeIndex >= 0) {
+                                            it.getLong(sizeIndex)
+                                        } else {
+                                            0L
+                                        }
+                                    } else {
+                                        0L
+                                    }
+                                } ?: 0L
+                            } catch (e: Exception) {
+                                0L
+                            }
+                        }
+                        val mimeTypes = filesToSave.map { uri ->
+                            context.contentResolver.getType(uri) ?: ""
+                        }
+                        viewModel.addFilesToExistingNote(
+                            currentNoteId,
+                            filesToSave.map { it.toString() },
+                            fileNames,
+                            fileSizes,
+                            mimeTypes
+                        )
+                        // 清除已保存的文件
+                        selectedFileUris.removeAll(filesToSave)
+                    }
                     lastSavedNoteId = currentNoteId
                     isSaving = false
                     if (!auto) {
@@ -298,19 +371,68 @@ fun NoteEditScreen(
                 coroutineScope.launch {
                     val imagesToSave = selectedImageUris.toList()
                     val recordingsToSave = newRecordings.toList()
+                    val filesToSave = selectedFileUris.toList()
                     
-                    viewModel.insertNoteWithImagesAndAudios(
+                    // 获取文件信息
+                    val fileNames = filesToSave.map { uri ->
+                        try {
+                            val cursor = context.contentResolver.query(uri, null, null, null, null)
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    if (nameIndex >= 0) {
+                                        it.getString(nameIndex) ?: "文件_${System.currentTimeMillis()}"
+                                    } else {
+                                        "文件_${System.currentTimeMillis()}"
+                                    }
+                                } else {
+                                    "文件_${System.currentTimeMillis()}"
+                                }
+                            } ?: "文件_${System.currentTimeMillis()}"
+                        } catch (e: Exception) {
+                            "文件_${System.currentTimeMillis()}"
+                        }
+                    }
+                    val fileSizes = filesToSave.map { uri ->
+                        try {
+                            val cursor = context.contentResolver.query(uri, null, null, null, null)
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                    if (sizeIndex >= 0) {
+                                        it.getLong(sizeIndex)
+                                    } else {
+                                        0L
+                                    }
+                                } else {
+                                    0L
+                                }
+                            } ?: 0L
+                        } catch (e: Exception) {
+                            0L
+                        }
+                    }
+                    val mimeTypes = filesToSave.map { uri ->
+                        context.contentResolver.getType(uri) ?: ""
+                    }
+                    
+                    viewModel.insertNoteWithImagesAndAudiosAndFiles(
                         note,
                         imagesToSave.map { it.toString() },
                         recordingsToSave.map { it.first },
                         recordingsToSave.map { File(it.first).name },
-                        recordingsToSave.map { it.second }
+                        recordingsToSave.map { it.second },
+                        filesToSave.map { it.toString() },
+                        fileNames,
+                        fileSizes,
+                        mimeTypes
                     ) { savedNoteId ->
                         lastSavedNoteId = savedNoteId
                         isSaving = false
-                        // 清除已保存的图片和录音
+                        // 清除已保存的图片、录音和文件
                         selectedImageUris.removeAll(imagesToSave)
                         newRecordings.removeAll(recordingsToSave)
+                        selectedFileUris.removeAll(filesToSave)
                         if (!auto) {
                             onSaveClick()
                         }
@@ -323,12 +445,12 @@ fun NoteEditScreen(
     }
     
     // 自动保存：监听标题、内容、图片和录音变化，使用防抖机制
-    LaunchedEffect(title, content.text, selectedImageUris.size, newRecordings.size) {
+    LaunchedEffect(title, content.text, selectedImageUris.size, newRecordings.size, selectedFileUris.size) {
         // 取消之前的保存任务
         saveJob?.cancel()
         
         // 如果内容为空且没有图片和录音，不保存
-        if (title.isBlank() && content.text.isBlank() && selectedImageUris.isEmpty() && newRecordings.isEmpty()) {
+        if (title.isBlank() && content.text.isBlank() && selectedImageUris.isEmpty() && newRecordings.isEmpty() && selectedFileUris.isEmpty()) {
             return@LaunchedEffect
         }
         
@@ -371,6 +493,16 @@ fun NoteEditScreen(
             } else {
                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
+        }
+    }
+    
+    // 格式化文件大小
+    fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+            else -> "${bytes / (1024 * 1024 * 1024)} GB"
         }
     }
     
@@ -438,7 +570,7 @@ fun NoteEditScreen(
                 IconButton(onClick = {
                     // 返回前自动保存
                     saveJob?.cancel()
-                    if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty()) {
+                    if (title.isNotBlank() || content.text.isNotBlank() || selectedImageUris.isNotEmpty() || newRecordings.isNotEmpty() || selectedFileUris.isNotEmpty()) {
                         saveNote(auto = true)
                     }
                     onBackClick()
@@ -755,6 +887,90 @@ fun NoteEditScreen(
                             }
                         }
                     }
+                    
+                    // 显示文件列表
+                    val allFiles = (existingFiles + selectedFileUris.mapIndexed { index, uri ->
+                        NoteFile(
+                            id = -index - 1, // 临时ID
+                            noteId = noteId ?: 0,
+                            uri = uri.toString(),
+                            fileName = try {
+                                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                                cursor?.use {
+                                    if (it.moveToFirst()) {
+                                        val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                        if (nameIndex >= 0) {
+                                            it.getString(nameIndex) ?: "文件_${System.currentTimeMillis()}"
+                                        } else {
+                                            "文件_${System.currentTimeMillis()}"
+                                        }
+                                    } else {
+                                        "文件_${System.currentTimeMillis()}"
+                                    }
+                                } ?: "文件_${System.currentTimeMillis()}"
+                            } catch (e: Exception) {
+                                "文件_${System.currentTimeMillis()}"
+                            },
+                            fileSize = try {
+                                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                                cursor?.use {
+                                    if (it.moveToFirst()) {
+                                        val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                        if (sizeIndex >= 0) {
+                                            it.getLong(sizeIndex)
+                                        } else {
+                                            0L
+                                        }
+                                    } else {
+                                        0L
+                                    }
+                                } ?: 0L
+                            } catch (e: Exception) {
+                                0L
+                            },
+                            mimeType = context.contentResolver.getType(uri) ?: ""
+                        )
+                    })
+                    if (allFiles.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LazyRow {
+                            items(allFiles) { file ->
+                                Card(
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .width(200.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.AttachFile,
+                                            contentDescription = "文件",
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        )
+                                        Text(
+                                            text = file.fileName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (file.fileSize > 0) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = formatFileSize(file.fileSize),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // 录音和图片按钮
@@ -784,6 +1000,15 @@ fun NoteEditScreen(
                         }
                     ) {
                         Icon(Icons.Filled.Image, contentDescription = "添加图片")
+                    }
+                    
+                    // 文件按钮
+                    FloatingActionButton(
+                        onClick = {
+                            filePicker.launch("*/*")
+                        }
+                    ) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "添加文件")
                     }
                 }
             }

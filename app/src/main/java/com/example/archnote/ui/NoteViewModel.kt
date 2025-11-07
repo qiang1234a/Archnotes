@@ -7,6 +7,7 @@ import com.example.archnote.data.Note
 import com.example.archnote.data.NoteRepository
 import com.example.archnote.data.NoteImage
 import com.example.archnote.data.NoteAudio
+import com.example.archnote.data.NoteFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,5 +113,53 @@ class NoteViewModel(private val repository: NoteRepository) : ViewModel() {
 
     suspend fun getAudiosForNote(noteId: Int): List<NoteAudio> {
         return repository.getAudiosForNote(noteId)
+    }
+    
+    // Files
+    fun insertNoteWithImagesAndAudiosAndFiles(
+        note: Note,
+        imageUris: List<String>,
+        audioUris: List<String>,
+        audioFileNames: List<String>,
+        audioDurations: List<Long>,
+        fileUris: List<String>,
+        fileNames: List<String>,
+        fileSizes: List<Long>,
+        mimeTypes: List<String>,
+        onDone: (Int) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val noteId = repository.insertNote(note)
+            if (imageUris.isNotEmpty()) {
+                repository.insertImagesForNote(noteId, imageUris)
+            }
+            if (audioUris.isNotEmpty()) {
+                repository.insertAudiosForNote(noteId, audioUris, audioFileNames, audioDurations)
+            }
+            if (fileUris.isNotEmpty()) {
+                repository.insertFilesForNote(noteId, fileUris, fileNames, fileSizes, mimeTypes)
+            }
+            onDone(noteId)
+        }
+    }
+    
+    fun addFilesToExistingNote(
+        noteId: Int,
+        fileUris: List<String>,
+        fileNames: List<String>,
+        fileSizes: List<Long>,
+        mimeTypes: List<String>,
+        onDone: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            if (fileUris.isNotEmpty()) {
+                repository.insertFilesForNote(noteId, fileUris, fileNames, fileSizes, mimeTypes)
+            }
+            onDone()
+        }
+    }
+    
+    suspend fun getFilesForNote(noteId: Int): List<NoteFile> {
+        return repository.getFilesForNote(noteId)
     }
 }

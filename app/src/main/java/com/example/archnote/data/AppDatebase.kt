@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import java.time.LocalDateTime
 
-@Database(entities = [Note::class, NoteImage::class, NoteAudio::class], version = 3, exportSchema = false)
+@Database(entities = [Note::class, NoteImage::class, NoteAudio::class, NoteFile::class], version = 4, exportSchema = false)
 @TypeConverters(LocalDateTimeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
