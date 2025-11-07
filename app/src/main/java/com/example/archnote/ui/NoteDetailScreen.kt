@@ -35,6 +35,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Mic
+import com.example.archnote.data.NoteAudio
 
 @Composable
 fun NoteDetailScreen(
@@ -47,11 +56,24 @@ fun NoteDetailScreen(
         factory = NoteViewModelFactory((LocalContext.current.applicationContext as ArchnoteApplication).repository)
     )
 ) {
+    val note by viewModel.currentNote.collectAsStateWithLifecycle()
+    val audios = remember { mutableStateListOf<NoteAudio>() }
+
+    // 加载笔记和录音列表
     LaunchedEffect(noteId) {
         viewModel.loadNoteById(noteId)
+        val audioList = viewModel.getAudiosForNote(noteId)
+        audios.clear()
+        audios.addAll(audioList)
     }
 
-    val note by viewModel.currentNote.collectAsStateWithLifecycle()
+    // 格式化录音时长
+    fun formatDuration(millis: Long): String {
+        val seconds = millis / 1000
+        val minutes = seconds / 60
+        val remainingSeconds = seconds % 60
+        return String.format("%02d:%02d", minutes, remainingSeconds)
+    }
 
     ArchnoteTheme {
         Column(modifier = modifier.fillMaxSize()) {
@@ -99,6 +121,53 @@ fun NoteDetailScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f)
                     )
+
+                    // 显示录音列表
+                    if (audios.isNotEmpty()) {
+                        Spacer(modifier = Modifier.padding(vertical = 12.dp))
+                        Text(
+                            text = "录音文件",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(audios) { audio ->
+                                Card(
+                                    modifier = Modifier.width(200.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Mic,
+                                            contentDescription = "录音",
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = audio.fileName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                            Text(
+                                                text = formatDuration(audio.duration),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Text(
                         text = "更新于: ${it.formattedCreatedAt()}",

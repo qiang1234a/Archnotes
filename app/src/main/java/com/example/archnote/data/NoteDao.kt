@@ -34,4 +34,14 @@ interface NoteDao {
 
     @Query("DELETE FROM note_images WHERE noteId = :noteId")
     suspend fun deleteImagesForNote(noteId: Int)
+
+    // Audios
+    @Insert
+    suspend fun insertNoteAudio(audio: NoteAudio): Long
+
+    @Query("SELECT * FROM note_audios WHERE noteId = :noteId")
+    suspend fun getAudiosForNote(noteId: Int): List<NoteAudio>
+
+    @Query("DELETE FROM note_audios WHERE noteId = :noteId")
+    suspend fun deleteAudiosForNote(noteId: Int)
 }

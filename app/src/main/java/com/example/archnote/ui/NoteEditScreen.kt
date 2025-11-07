@@ -50,8 +50,24 @@ import androidx.compose.foundation.lazy.items
 import coil.compose.AsyncImage
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import com.example.archnote.utils.AudioRecorderManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.font.FontWeight
+import java.io.File
+import android.Manifest
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.archnote.data.NoteAudio
+import kotlinx.coroutines.delay
 @Composable
 fun NoteEditScreen(
     noteId: Int?,
@@ -66,8 +82,54 @@ fun NoteEditScreen(
     var content by remember { mutableStateOf(TextFieldValue("")) }
     val titleFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val selectedImageUris = remember { mutableStateListOf<android.net.Uri>() }
     val existingImageUris = remember { mutableStateListOf<android.net.Uri>() }
+    
+    // 录音相关状态
+    val audioRecorderManager = remember { AudioRecorderManager(context) }
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingDuration by remember { mutableStateOf(0L) }
+    val newRecordings = remember { mutableStateListOf<Pair<String, Long>>() } // (filePath, duration)
+    val existingAudios = remember { mutableStateListOf<NoteAudio>() }
+    
+    // 权限请求
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted && !isRecording) {
+            val filePath = audioRecorderManager.startRecording()
+            if (filePath != null) {
+                isRecording = true
+            }
+        }
+    }
+    
+    // 录音时长更新
+    LaunchedEffect(isRecording) {
+        while (isRecording) {
+            delay(100)
+            recordingDuration = audioRecorderManager.getRecordingDuration()
+        }
+    }
+    
+    // 清理资源
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_DESTROY) {
+                if (isRecording) {
+                    audioRecorderManager.stopRecording()
+                    isRecording = false
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            audioRecorderManager.release()
+        }
+    }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -87,6 +149,9 @@ fun NoteEditScreen(
             val images = viewModel.getImagesForNote(noteId)
             existingImageUris.clear()
             existingImageUris.addAll(images.mapNotNull { android.net.Uri.parse(it.uri) })
+            val audios = viewModel.getAudiosForNote(noteId)
+            existingAudios.clear()
+            existingAudios.addAll(audios)
         } else {
             awaitFrame()
             titleFocusRequester.requestFocus()
@@ -112,19 +177,61 @@ fun NoteEditScreen(
                             selectedImageUris.map { it.toString() }
                         )
                     }
+                    if (newRecordings.isNotEmpty()) {
+                        viewModel.addAudiosToExistingNote(
+                            noteId,
+                            newRecordings.map { it.first },
+                            newRecordings.map { File(it.first).name },
+                            newRecordings.map { it.second }
+                        )
+                    }
                     onSaveClick()
                 }
             } else {
                 coroutineScope.launch {
-                    viewModel.insertNoteWithImages(
+                    viewModel.insertNoteWithImagesAndAudios(
                         note,
-                        selectedImageUris.map { it.toString() }
+                        selectedImageUris.map { it.toString() },
+                        newRecordings.map { it.first },
+                        newRecordings.map { File(it.first).name },
+                        newRecordings.map { it.second }
                     ) {
                         onSaveClick()
                     }
                 }
             }
         }
+    }
+    
+    // 开始/停止录音
+    fun toggleRecording() {
+        if (isRecording) {
+            val duration = audioRecorderManager.stopRecording()
+            val filePath = audioRecorderManager.getCurrentOutputFile()?.absolutePath
+            if (filePath != null && duration > 0) {
+                newRecordings.add(Pair(filePath, duration))
+            }
+            isRecording = false
+            recordingDuration = 0
+        } else {
+            if (audioRecorderManager.hasRecordPermission()) {
+                val filePath = audioRecorderManager.startRecording()
+                if (filePath != null) {
+                    isRecording = true
+                    recordingDuration = 0
+                }
+            } else {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+    
+    // 格式化录音时长
+    fun formatDuration(millis: Long): String {
+        val seconds = millis / 1000
+        val minutes = seconds / 60
+        val remainingSeconds = seconds % 60
+        return String.format("%02d:%02d", minutes, remainingSeconds)
     }
 
     ArchnoteTheme {
@@ -267,19 +374,105 @@ fun NoteEditScreen(
                             }
                         }
                     }
+                    
+                    // 显示录音列表
+                    val allAudios = (existingAudios + newRecordings.mapIndexed { index, (path, duration) ->
+                        NoteAudio(
+                            id = -index - 1, // 临时ID
+                            noteId = noteId ?: 0,
+                            uri = path,
+                            fileName = File(path).name,
+                            duration = duration
+                        )
+                    })
+                    if (allAudios.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LazyRow {
+                            items(allAudios) { audio ->
+                                Card(
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .width(200.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp)
+                                    ) {
+                                        Text(
+                                            text = audio.fileName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = formatDuration(audio.duration),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 显示录音状态
+                    if (isRecording) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Mic,
+                                    contentDescription = "录音中",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "录音中: ${formatDuration(recordingDuration)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
                 }
 
-                FloatingActionButton(
-                    onClick = {
-                        photoPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
+                // 录音和图片按钮
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(Icons.Filled.Image, contentDescription = "添加图片")
+                    // 录音按钮
+                    FloatingActionButton(
+                        onClick = { toggleRecording() },
+                        containerColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
+                            contentDescription = if (isRecording) "停止录音" else "开始录音"
+                        )
+                    }
+                    
+                    // 图片按钮
+                    FloatingActionButton(
+                        onClick = {
+                            photoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }
+                    ) {
+                        Icon(Icons.Filled.Image, contentDescription = "添加图片")
+                    }
                 }
             }
         }

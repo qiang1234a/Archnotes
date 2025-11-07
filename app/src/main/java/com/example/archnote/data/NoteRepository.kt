@@ -40,4 +40,30 @@ class NoteRepository(private val noteDao: NoteDao) {
     suspend fun deleteImagesForNote(noteId: Int) {
         noteDao.deleteImagesForNote(noteId)
     }
+
+    // Audios
+    suspend fun insertNoteAudio(audio: NoteAudio): Int {
+        return noteDao.insertNoteAudio(audio).toInt()
+    }
+
+    suspend fun insertAudiosForNote(noteId: Int, audioUris: List<String>, fileNames: List<String>, durations: List<Long>) {
+        for (i in audioUris.indices) {
+            noteDao.insertNoteAudio(
+                NoteAudio(
+                    noteId = noteId,
+                    uri = audioUris[i],
+                    fileName = fileNames.getOrElse(i) { "录音_${System.currentTimeMillis()}.m4a" },
+                    duration = durations.getOrElse(i) { 0L }
+                )
+            )
+        }
+    }
+
+    suspend fun getAudiosForNote(noteId: Int): List<NoteAudio> {
+        return noteDao.getAudiosForNote(noteId)
+    }
+
+    suspend fun deleteAudiosForNote(noteId: Int) {
+        noteDao.deleteAudiosForNote(noteId)
+    }
 }
