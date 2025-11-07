@@ -312,6 +312,12 @@ fun NoteEditScreen(
         
         // 生成Markdown表格
         val tableBuilder = StringBuilder()
+        
+        // 如果当前位置不在行首，先添加换行
+        if (start > 0 && start < text.length && text[start - 1] != '\n') {
+            tableBuilder.append("\n")
+        }
+        
         // 表头
         tableBuilder.append("|")
         repeat(cols) {
@@ -328,6 +334,7 @@ fun NoteEditScreen(
                 tableBuilder.append("     |")
             }
         }
+        // 表格后添加换行
         tableBuilder.append("\n")
         
         val inserted = text.substring(0, start) + tableBuilder.toString() + text.substring(start)

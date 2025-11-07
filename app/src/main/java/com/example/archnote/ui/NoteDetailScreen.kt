@@ -203,15 +203,25 @@ fun NoteDetailScreen(
 
 @Composable
 private fun parseContentWithTables(input: String) {
+    if (input.isEmpty()) {
+        return
+    }
+    
     val lines = input.split("\n")
     var i = 0
     val textBuffer = StringBuilder()
     
     while (i < lines.size) {
         val line = lines[i]
+        val trimmedLine = line.trim()
         
-        // 检查是否是表格行（以|开头）
-        if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+        // 检查是否是表格行（以|开头和结尾，且包含至少3个|，即至少有一列）
+        val isTableLine = trimmedLine.startsWith("|") && 
+                         trimmedLine.endsWith("|") && 
+                         trimmedLine.length > 2 &&
+                         trimmedLine.count { it == '|' } >= 3
+        
+        if (isTableLine) {
             // 先输出之前的文本
             if (textBuffer.isNotEmpty()) {
                 Text(
@@ -222,39 +232,73 @@ private fun parseContentWithTables(input: String) {
                 textBuffer.clear()
             }
             
-            // 解析表格
+            // 解析表格 - 收集连续的表格行（允许中间有一个空行）
             val tableLines = mutableListOf<String>()
-            while (i < lines.size && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
-                tableLines.add(lines[i])
-                i++
+            var consecutiveEmptyLines = 0
+            
+            while (i < lines.size) {
+                val currentLine = lines[i]
+                val currentTrimmed = currentLine.trim()
+                
+                val isCurrentTableLine = currentTrimmed.startsWith("|") && 
+                                         currentTrimmed.endsWith("|") && 
+                                         currentTrimmed.length > 2 &&
+                                         currentTrimmed.count { it == '|' } >= 3
+                
+                if (isCurrentTableLine) {
+                    // 表格行
+                    tableLines.add(currentLine)
+                    consecutiveEmptyLines = 0
+                    i++
+                } else if (currentTrimmed.isEmpty() && tableLines.isNotEmpty() && consecutiveEmptyLines == 0) {
+                    // 允许一个空行（用于分隔）
+                    consecutiveEmptyLines++
+                    i++
+                } else {
+                    // 非表格行，结束表格收集
+                    break
+                }
             }
             
+            // 至少需要表头行和分隔行，或者至少两行数据
             if (tableLines.size >= 2) {
-                // 解析表格（第一行是表头，第二行是分隔行，从第三行开始是数据）
+                // 解析表格数据
                 val tableData = tableLines.map { line ->
                     line.split("|").map { it.trim() }.filter { it.isNotEmpty() }
                 }
                 
-                // 检查第二行是否是分隔行（只包含-和|）
-                val isSeparatorLine = tableLines.size > 1 && 
-                    tableLines[1].replace("|", "").replace("-", "").replace(":", "").trim().isEmpty()
+                // 检查第二行是否是分隔行（只包含-、:和|）
+                val isSeparatorLine = tableLines.size > 1 && {
+                    val separatorLine = tableLines[1].trim()
+                    separatorLine.replace("|", "").replace("-", "").replace(":", "").trim().isEmpty()
+                }()
                 
-                if (tableData.isNotEmpty() && tableData.all { it.size == tableData[0].size }) {
-                    // 显示表格
-                    Spacer(modifier = Modifier.height(8.dp))
-                    val headerRow = tableData[0]
-                    val dataRows = if (isSeparatorLine && tableData.size > 2) {
-                        tableData.subList(2, tableData.size)
-                    } else if (!isSeparatorLine && tableData.size > 1) {
-                        tableData.subList(1, tableData.size)
-                    } else {
-                        emptyList()
+                // 验证所有行的列数一致
+                if (tableData.isNotEmpty() && tableData[0].isNotEmpty()) {
+                    val expectedCols = tableData[0].size
+                    val allSameSize = tableData.all { it.size == expectedCols }
+                    
+                    if (allSameSize && expectedCols > 0) {
+                        // 显示表格
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val headerRow = tableData[0]
+                        val dataRows = if (isSeparatorLine && tableData.size > 2) {
+                            // 跳过分隔行
+                            tableData.subList(2, tableData.size)
+                        } else if (!isSeparatorLine && tableData.size > 1) {
+                            // 没有分隔行，第一行是表头，其余是数据
+                            tableData.subList(1, tableData.size)
+                        } else {
+                            emptyList()
+                        }
+                        
+                        // 即使没有数据行，也显示表头
+                        TableView(
+                            headers = headerRow,
+                            rows = dataRows
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    TableView(
-                        headers = headerRow,
-                        rows = dataRows
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
             continue
