@@ -21,8 +21,10 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.archnote.ArchnoteApplication
 import com.example.archnote.data.Note
 import com.example.archnote.ui.theme.ArchnoteTheme
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun NoteListScreen(
@@ -71,6 +74,11 @@ fun NoteListScreen(
             }
             
             Box(modifier = Modifier.fillMaxSize()) {
+                val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年MM月dd日") }
+                val groupedNotes = remember(notes.value) {
+                    notes.value.groupBy { it.updatedAt.toLocalDate() }
+                }
+
                 if (notes.value.isEmpty()) {
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -89,11 +97,29 @@ fun NoteListScreen(
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(notes.value) { note ->
-                            NoteItem(
-                                note = note,
-                                onNoteClick = onNoteClick
-                            )
+                        groupedNotes.forEach { (date, noteList) ->
+                            item(key = "header-${'$'}date") {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.background,
+                                    tonalElevation = 2.dp
+                                ) {
+                                    Text(
+                                        text = dateFormatter.format(date),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+
+                            items(noteList, key = { it.id }) { note ->
+                                NoteItem(
+                                    note = note,
+                                    onNoteClick = onNoteClick
+                                )
+                            }
                         }
                     }
                 }
