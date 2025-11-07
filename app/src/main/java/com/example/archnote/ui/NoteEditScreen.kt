@@ -52,6 +52,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.archnote.utils.AudioRecorderManager
@@ -98,6 +101,11 @@ fun NoteEditScreen(
     var saveJob by remember { mutableStateOf<Job?>(null) }
     var isSaving by remember { mutableStateOf(false) }
     var lastSavedNoteId by remember { mutableStateOf<Int?>(null) }
+    
+    // 表格对话框相关
+    var showTableDialog by remember { mutableStateOf(false) }
+    var tableRows by remember { mutableStateOf("3") }
+    var tableCols by remember { mutableStateOf("3") }
     
     // 权限请求
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -295,6 +303,41 @@ fun NoteEditScreen(
         val remainingSeconds = seconds % 60
         return String.format("%02d:%02d", minutes, remainingSeconds)
     }
+    
+    // 插入表格
+    fun insertTable(rows: Int, cols: Int) {
+        val sel = content.selection
+        val text = content.text
+        val start = sel.start.coerceAtLeast(0).coerceAtMost(text.length)
+        
+        // 生成Markdown表格
+        val tableBuilder = StringBuilder()
+        // 表头
+        tableBuilder.append("|")
+        repeat(cols) {
+            tableBuilder.append(" 列${it + 1} |")
+        }
+        tableBuilder.append("\n|")
+        repeat(cols) {
+            tableBuilder.append("-----|")
+        }
+        // 数据行
+        repeat(rows) {
+            tableBuilder.append("\n|")
+            repeat(cols) {
+                tableBuilder.append("     |")
+            }
+        }
+        tableBuilder.append("\n")
+        
+        val inserted = text.substring(0, start) + tableBuilder.toString() + text.substring(start)
+        val cursor = start + tableBuilder.length
+        content = TextFieldValue(
+            inserted,
+            selection = TextRange(cursor, cursor)
+        )
+        showTableDialog = false
+    }
 
     ArchnoteTheme {
         Column(modifier = modifier.fillMaxSize()) {
@@ -403,6 +446,67 @@ fun NoteEditScreen(
                         }) {
                             Text("U")
                         }
+                        
+                        TextButton(onClick = {
+                            showTableDialog = true
+                        }) {
+                            Icon(
+                                Icons.Filled.TableChart,
+                                contentDescription = "插入表格",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    
+                    // 表格创建对话框
+                    if (showTableDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showTableDialog = false },
+                            title = { Text("创建表格") },
+                            text = {
+                                Column {
+                                    OutlinedTextField(
+                                        value = tableRows,
+                                        onValueChange = { 
+                                            if (it.all { char -> char.isDigit() } && it.isNotEmpty()) {
+                                                tableRows = it
+                                            }
+                                        },
+                                        label = { Text("行数") },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedTextField(
+                                        value = tableCols,
+                                        onValueChange = { 
+                                            if (it.all { char -> char.isDigit() } && it.isNotEmpty()) {
+                                                tableCols = it
+                                            }
+                                        },
+                                        label = { Text("列数") },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        val rows = tableRows.toIntOrNull() ?: 3
+                                        val cols = tableCols.toIntOrNull() ?: 3
+                                        if (rows > 0 && cols > 0) {
+                                            insertTable(rows.coerceAtMost(20), cols.coerceAtMost(10))
+                                        }
+                                    }
+                                ) {
+                                    Text("确定")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showTableDialog = false }) {
+                                    Text("取消")
+                                }
+                            }
+                        )
                     }
                     // 标题输入
                     BasicTextField(

@@ -21,8 +21,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-//import androidx.compose.runtime.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Mic
+import com.example.archnote.data.NoteAudio
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -35,15 +48,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material.icons.filled.Mic
-import com.example.archnote.data.NoteAudio
 
 @Composable
 fun NoteDetailScreen(
@@ -116,11 +120,14 @@ fun NoteDetailScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    Text(
-                        text = parseSimpleStyles(it.content),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
-                    )
+                    // 解析并显示内容（包括表格）
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        parseContentWithTables(it.content)
+                    }
 
                     // 显示录音列表
                     if (audios.isNotEmpty()) {
@@ -187,6 +194,155 @@ fun NoteDetailScreen(
                     Text(text = "笔记不存在或已被删除")
                     Button(onClick = onBackClick, modifier = Modifier.padding(top = 16.dp)) {
                         Text("返回列表")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun parseContentWithTables(input: String) {
+    val lines = input.split("\n")
+    var i = 0
+    val textBuffer = StringBuilder()
+    
+    while (i < lines.size) {
+        val line = lines[i]
+        
+        // 检查是否是表格行（以|开头）
+        if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+            // 先输出之前的文本
+            if (textBuffer.isNotEmpty()) {
+                Text(
+                    text = parseSimpleStyles(textBuffer.toString()),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                textBuffer.clear()
+            }
+            
+            // 解析表格
+            val tableLines = mutableListOf<String>()
+            while (i < lines.size && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+                tableLines.add(lines[i])
+                i++
+            }
+            
+            if (tableLines.size >= 2) {
+                // 解析表格（第一行是表头，第二行是分隔行，从第三行开始是数据）
+                val tableData = tableLines.map { line ->
+                    line.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                }
+                
+                // 检查第二行是否是分隔行（只包含-和|）
+                val isSeparatorLine = tableLines.size > 1 && 
+                    tableLines[1].replace("|", "").replace("-", "").replace(":", "").trim().isEmpty()
+                
+                if (tableData.isNotEmpty() && tableData.all { it.size == tableData[0].size }) {
+                    // 显示表格
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val headerRow = tableData[0]
+                    val dataRows = if (isSeparatorLine && tableData.size > 2) {
+                        tableData.subList(2, tableData.size)
+                    } else if (!isSeparatorLine && tableData.size > 1) {
+                        tableData.subList(1, tableData.size)
+                    } else {
+                        emptyList()
+                    }
+                    TableView(
+                        headers = headerRow,
+                        rows = dataRows
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+            continue
+        }
+        
+        // 普通文本行
+        if (textBuffer.isNotEmpty()) {
+            textBuffer.append("\n")
+        }
+        textBuffer.append(line)
+        i++
+    }
+    
+    // 输出剩余的文本
+    if (textBuffer.isNotEmpty()) {
+        Text(
+            text = parseSimpleStyles(textBuffer.toString()),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun TableView(headers: List<String>, rows: List<List<String>>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(1.dp)
+        ) {
+            // 表头
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                headers.forEachIndexed { index, header ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .border(
+                                if (index < headers.size - 1) 1.dp else 0.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                androidx.compose.foundation.shape.RoundedCornerShape(0)
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = header,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            
+            // 数据行
+            rows.forEachIndexed { rowIndex, row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    row.forEachIndexed { index, cell ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .border(
+                                    if (index < row.size - 1) 1.dp else 0.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(0)
+                                )
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = cell,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
