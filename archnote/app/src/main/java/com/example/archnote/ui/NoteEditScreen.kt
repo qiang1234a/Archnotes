@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,10 +62,11 @@ fun NoteEditScreen(
     val titleFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
     
-    // 撤销功能相关
+    // 撤销/重做功能相关
     data class EditState(val title: String, val content: TextFieldValue)
     val undoHistory = remember { mutableStateListOf<EditState>() }
-    var isUndoing by remember { mutableStateOf(false) }
+    val redoHistory = remember { mutableStateListOf<EditState>() }
+    var isUndoingOrRedoing by remember { mutableStateOf(false) }
     var saveHistoryJob by remember { mutableStateOf<Job?>(null) }
 
     // 如果是编辑现有笔记，加载笔记内容
@@ -74,12 +76,14 @@ fun NoteEditScreen(
             val note = viewModel.getNoteById(noteId)
             title = note?.title ?: ""
             content = TextFieldValue(note?.content ?: "")
-            // 初始化撤销历史
+            // 初始化撤销/重做历史
             undoHistory.clear()
+            redoHistory.clear()
             undoHistory.add(EditState(title, content))
         } else {
-            // 新笔记，初始化撤销历史
+            // 新笔记，初始化撤销/重做历史
             undoHistory.clear()
+            redoHistory.clear()
             undoHistory.add(EditState("", TextFieldValue("")))
             awaitFrame()
             titleFocusRequester.requestFocus()
@@ -88,7 +92,7 @@ fun NoteEditScreen(
     
     // 保存状态到撤销历史（防抖）
     fun saveToHistory() {
-        if (!isUndoing) {
+        if (!isUndoingOrRedoing) {
             saveHistoryJob?.cancel()
             saveHistoryJob = coroutineScope.launch {
                 delay(300) // 300ms 防抖
@@ -101,6 +105,8 @@ fun NoteEditScreen(
                     if (undoHistory.size > 50) {
                         undoHistory.removeAt(0)
                     }
+                    // 有新的编辑操作时，清空重做历史
+                    redoHistory.clear()
                 }
             }
         }
@@ -109,14 +115,39 @@ fun NoteEditScreen(
     // 撤销操作
     fun undo() {
         if (undoHistory.size > 1) {
-            isUndoing = true
-            // 移除当前状态
-            undoHistory.removeLast()
-            // 恢复到上一个状态
+            isUndoingOrRedoing = true
+            val currentState = EditState(title, content)
+            // 将当前状态保存到重做栈
+            redoHistory.add(currentState)
+            // 限制重做历史数量
+            if (redoHistory.size > 50) {
+                redoHistory.removeAt(0)
+            }
+            // 从撤销栈恢复上一个状态
+            undoHistory.removeAt(undoHistory.lastIndex)
             val previousState = undoHistory.last()
             title = previousState.title
             content = previousState.content
-            isUndoing = false
+            isUndoingOrRedoing = false
+        }
+    }
+    
+    // 重做操作
+    fun redo() {
+        if (redoHistory.isNotEmpty()) {
+            isUndoingOrRedoing = true
+            val currentState = EditState(title, content)
+            // 将当前状态保存到撤销栈
+            undoHistory.add(currentState)
+            // 限制撤销历史数量
+            if (undoHistory.size > 50) {
+                undoHistory.removeAt(0)
+            }
+            // 从重做栈恢复下一个状态
+            val nextState = redoHistory.removeAt(redoHistory.lastIndex)
+            title = nextState.title
+            content = nextState.content
+            isUndoingOrRedoing = false
         }
     }
 
@@ -180,6 +211,21 @@ fun NoteEditScreen(
                             Icons.Filled.Undo,
                             contentDescription = "撤销",
                             tint = if (undoHistory.size > 1) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    }
+                    
+                    // 重做按钮
+                    IconButton(
+                        onClick = { redo() },
+                        enabled = redoHistory.isNotEmpty()
+                    ) {
+                        Icon(
+                            Icons.Filled.Redo,
+                            contentDescription = "重做",
+                            tint = if (redoHistory.isNotEmpty()) 
                                 MaterialTheme.colorScheme.primary 
                             else 
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
