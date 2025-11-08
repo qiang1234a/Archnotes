@@ -15,16 +15,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +55,7 @@ fun NoteListScreen(
         )
 ) {
     val notes = viewModel.allNotes.collectAsStateWithLifecycle(emptyList())
+    var searchQuery by remember { mutableStateOf("") }
 
     ArchnoteTheme {
         Column(modifier = modifier
@@ -72,11 +80,46 @@ fun NoteListScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            // 搜索框
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("搜索笔记...") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Search, contentDescription = "搜索")
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "清除")
+                        }
+                    }
+                },
+                singleLine = true
+            )
             
             Box(modifier = Modifier.fillMaxSize()) {
                 val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年MM月dd日") }
-                val groupedNotes = remember(notes.value) {
-                    notes.value.groupBy { it.updatedAt.toLocalDate() }
+                
+                // 根据搜索关键词过滤笔记
+                val filteredNotes = remember(notes.value, searchQuery) {
+                    if (searchQuery.isBlank()) {
+                        notes.value
+                    } else {
+                        val query = searchQuery.lowercase()
+                        notes.value.filter { note ->
+                            note.title.lowercase().contains(query) ||
+                            note.content.lowercase().contains(query)
+                        }
+                    }
+                }
+                
+                val groupedNotes = remember(filteredNotes) {
+                    filteredNotes.groupBy { it.updatedAt.toLocalDate() }
                 }
 
                 if (notes.value.isEmpty()) {
@@ -92,6 +135,29 @@ fun NoteListScreen(
                         Text(
                             text = "点击右下角按钮创建第一条笔记",
                             style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                } else if (filteredNotes.isEmpty() && searchQuery.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Filled.Search,
+                            contentDescription = "未找到",
+                            modifier = Modifier.padding(bottom = 16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "未找到匹配的笔记",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                        Text(
+                            text = "尝试使用其他关键词搜索",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp)
                         )
                     }
